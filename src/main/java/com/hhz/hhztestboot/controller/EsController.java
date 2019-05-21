@@ -4,7 +4,7 @@ import com.hhz.hhztestboot.model.Account;
 import com.hhz.hhztestboot.model.MedusaEsPage;
 import com.hhz.hhztestboot.model.entity.SearchField;
 import com.hhz.hhztestboot.util.ElasticsearchUtil;
-import com.uniubi.sdk.util.UuidUtil;
+import com.hhz.hhztestboot.util.UuidUtil;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -95,7 +95,7 @@ public class EsController {
     @ApiOperation(value = "新增员工", notes = "[@黄辉宙]")
     public String insertJson(Account account) {
         account.setDate(new Date());
-        String uuid=UuidUtil.uuid();
+        String uuid= UuidUtil.uuid();
         account.setId(uuid);
         return ElasticsearchUtil.addData(account, indexName, esType);
     }

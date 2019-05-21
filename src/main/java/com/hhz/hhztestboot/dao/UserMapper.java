@@ -1,7 +1,7 @@
 package com.hhz.hhztestboot.dao;
 
 import com.hhz.hhztestboot.model.User;
-import com.uniubi.sdk.mybatis.MybatisMysqlMapper;
+import com.hhz.hhztestboot.mybatis.MybatisMysqlMapper;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper

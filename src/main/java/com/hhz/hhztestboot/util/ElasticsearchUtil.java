@@ -3,8 +3,6 @@ package com.hhz.hhztestboot.util;
 import com.alibaba.fastjson.JSONObject;
 import com.hhz.hhztestboot.model.MedusaEsPage;
 import com.hhz.hhztestboot.model.entity.SearchField;
-import com.uniubi.sdk.util.GsonUtil;
-import com.uniubi.sdk.util.ReflectionUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
