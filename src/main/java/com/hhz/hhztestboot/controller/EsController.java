@@ -1,5 +1,6 @@
 package com.hhz.hhztestboot.controller;
 
+import com.hhz.hhztestboot.enums.EsQueryTypeEnum;
 import com.hhz.hhztestboot.model.Account;
 import com.hhz.hhztestboot.model.MedusaEsPage;
 import com.hhz.hhztestboot.model.entity.SearchField;
@@ -50,16 +51,17 @@ public class EsController {
      */
     @PostMapping("/index")
     @ApiOperation(value = "创建index", notes = "[@黄辉宙]")
-    public String createIndex() {
+    public String createIndex(@RequestParam(value = "是否使用中文分词") boolean ifIk){
         if (ElasticsearchUtil.isIndexExist(indexName)) {
             return "索引已经存在";
         }
-        if(ElasticsearchUtil.createIndex(indexName)){
+        if(ElasticsearchUtil.createIndex(indexName,ifIk)){
             return "索引创建成功";
         }else {
             return "索引创建失败";
         }
     }
+
 
     /**
      * <p class="detail">
@@ -166,11 +168,11 @@ public class EsController {
      * @date 2019.05.18 17:39:14
      */
     @GetMapping("/queryMatch")
-    @ApiOperation(value = "匹配查询（权重都为1）", notes = "[@黄辉宙]")
-    public MedusaEsPage<Account> queryMatch(@RequestParam @ApiParam(value = "查询内容") String keyWord,@RequestParam @ApiParam(value = "是否高亮") boolean highShow,@RequestParam(defaultValue = "0") @ApiParam("起始页") Integer startPage,@RequestParam(defaultValue = "10") @ApiParam("每页个数") Integer pageSize,String [] matchFields) {
+    @ApiOperation(value = "查询（权重都为1）", notes = "[@黄辉宙]")
+    public MedusaEsPage<Account> queryMatch(@RequestParam @ApiParam(value = "查询内容") String keyWord, @RequestParam(defaultValue = "false") @ApiParam(value = "是否高亮") boolean highShow, @RequestParam(defaultValue = "0") @ApiParam("起始页") Integer startPage, @RequestParam(defaultValue = "10") @ApiParam("每页个数") Integer pageSize, @RequestParam(defaultValue = "0") @ApiParam("搜索类型 0:match 1：matchPhrase 2:term") Integer esQueryTypeEnum, String [] matchFields) {
 
         MedusaEsPage<Account> accountMedusaEsPage = ElasticsearchUtil.
-                searchEs(indexName, esType, startPage, pageSize, keyWord, null, Account.class,highShow,matchFields);
+                searchEs(indexName, esType, startPage, pageSize, keyWord, null, Account.class, EsQueryTypeEnum.valueOf(esQueryTypeEnum.byteValue()),highShow,matchFields);
         return accountMedusaEsPage;
     }
 
@@ -187,10 +189,10 @@ public class EsController {
      * @date 2019.05.18 17:39:14
      */
     @PostMapping("/queryMatchWithWeight")
-    @ApiOperation(value = "匹配查询（自定义权重）", notes = "[@黄辉宙]")
-    public MedusaEsPage<Account> queryMatchWithWeight(@RequestParam @ApiParam(value = "查询内容") String keyWord,@RequestParam @ApiParam(value = "是否高亮") boolean highShow,@RequestParam(defaultValue = "0") @ApiParam Integer startPage,@RequestParam(defaultValue = "10") @ApiParam Integer pageSize, @RequestBody List<SearchField> matchFields) {
+    @ApiOperation(value = "查询（自定义权重）", notes = "[@黄辉宙]")
+    public MedusaEsPage<Account> queryMatchWithWeight(@RequestParam @ApiParam(value = "查询内容") String keyWord,@RequestParam @ApiParam(value = "是否高亮") boolean highShow,@RequestParam(defaultValue = "0") @ApiParam Integer startPage,@RequestParam(defaultValue = "10") @ApiParam Integer pageSize,@RequestParam(defaultValue = "0") @ApiParam("搜索类型 0:match 1：matchPhrase 2:term") Integer esQueryTypeEnum, @RequestBody List<SearchField> matchFields) {
         MedusaEsPage<Account> accountMedusaEsPage = ElasticsearchUtil.
-                searchEs(indexName, esType, startPage, pageSize, keyWord, null, Account.class,highShow,matchFields.toArray(new SearchField[]{}));
+                searchEs(indexName, esType, startPage, pageSize, keyWord, null, Account.class,EsQueryTypeEnum.valueOf(esQueryTypeEnum.byteValue()),highShow,matchFields.toArray(new SearchField[]{}));
         return accountMedusaEsPage;
     }
 

@@ -45,7 +45,7 @@ spring:
 
 
 elasticsearch:
-  ip: 192.168.60.148
+  ip: localhost
   port: 9300
   pool: 5
   cluster:

@@ -1,13 +1,18 @@
 package com.hhz.hhztestboot.util;
 
 import com.alibaba.fastjson.JSONObject;
+import com.hhz.hhztestboot.enums.EsQueryTypeEnum;
+import com.hhz.hhztestboot.model.Account;
 import com.hhz.hhztestboot.model.MedusaEsPage;
 import com.hhz.hhztestboot.model.entity.SearchField;
+
 import org.apache.commons.lang3.StringUtils;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
 import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
 import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsResponse;
+import org.elasticsearch.action.admin.indices.mapping.put.PutMappingRequest;
+import org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
 import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetRequestBuilder;
 import org.elasticsearch.action.index.IndexResponse;
@@ -15,9 +20,14 @@ import org.elasticsearch.action.search.SearchRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.action.update.UpdateRequest;
+import org.elasticsearch.client.Requests;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.text.Text;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.MultiMatchQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.fetch.subphase.highlight.HighlightBuilder;
@@ -30,6 +40,7 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import javax.persistence.Id;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -78,14 +89,139 @@ public class ElasticsearchUtil {
      * @author huanghuizhou
      * @date 2019.05.18 16:18:03
      */
-    public static boolean createIndex(String index) {
+    public static boolean createIndex(String index,boolean ifIk)  {
         if (!isIndexExist(index)) {
             LOGGER.info("Index is not exits!");
         }
         CreateIndexResponse indexresponse = client.admin().indices().prepareCreate(index).execute().actionGet();
         LOGGER.info("执行建立成功？" + indexresponse.isAcknowledged());
-        return indexresponse.isAcknowledged();
+        if(!indexresponse.isAcknowledged()){
+            return false;
+        }
+        if(!ifIk){
+            return true;
+        }
+        //创建mapping 使用中文分词
+        boolean mapping = createMapping(index, Account.class);
+        if(!mapping){
+            deleteIndex(index);
+        }
+        return mapping;
+
     }
+
+    /**
+     * demo mapping
+     * {
+     *     "medusa-es": {
+     *         "mappings": {
+     *             "account": {
+     *                 "properties": {
+     *                     "date": {
+     *                         "type": "date"
+     *                     },
+     *                     "employeeNumber": {
+     *                         "type": "text",
+     *                         "fields": {
+     *                             "keyword": {
+     *                                 "type": "keyword",
+     *                                 "ignore_above": 256
+     *                             }
+     *                         },
+     *                         "analyzer": "ik_max_word",
+     *                         "search_analyzer": "ik_smart"
+     *                     },
+     *                     "id": {
+     *                         "type": "text",
+     *                         "index_options": "docs"
+     *                     },
+     *                     "name": {
+     *                         "type": "text",
+     *                         "fields": {
+     *                             "keyword": {
+     *                                 "type": "keyword",
+     *                                 "ignore_above": 256
+     *                             }
+     *                         },
+     *                         "analyzer": "ik_max_word",
+     *                         "search_analyzer": "ik_smart"
+     *                     },
+     *                     "position": {
+     *                         "type": "text",
+     *                         "fields": {
+     *                             "keyword": {
+     *                                 "type": "keyword",
+     *                                 "ignore_above": 256
+     *                             }
+     *                         },
+     *                         "analyzer": "ik_max_word",
+     *                         "search_analyzer": "ik_smart"
+     *                     },
+     *                     "stageName": {
+     *                         "type": "text",
+     *                         "fields": {
+     *                             "keyword": {
+     *                                 "type": "keyword",
+     *                                 "ignore_above": 256
+     *                             }
+     *                         },
+     *                         "analyzer": "ik_max_word",
+     *                         "search_analyzer": "ik_smart"
+     *                     },
+     *                     "type": {
+     *                         "type": "long"
+     *                     }
+     *                 }
+     *             }
+     *         }
+     *     }
+     * }
+     */
+    public static boolean createMapping(String index,Class cls){
+        String type=cls.getSimpleName().toLowerCase();
+        List<Field> fields = ReflectionUtil.getAllFieldsList(
+                cls,
+                false,
+                q -> q.isAnnotationPresent(Id.class) || q.isAnnotationPresent(org.springframework.data.annotation.Id.class),
+                true);
+        Field idField;
+        if (fields.size() > 0) {
+            idField = fields.get(0);
+        } else {
+            idField = ReflectionUtil.getFieldByName(cls, "id");
+        }
+
+        if(idField==null){
+            throw new RuntimeException("es id can not be null");
+        }
+
+        String id=idField.getName();
+
+
+        List<Field> allFieldsList = ReflectionUtil.getAllFieldsList(cls,true,
+                q -> !q.getName().equals(idField.getName()),
+                false);
+        XContentBuilder builder = null;
+        try {
+            builder = XContentFactory.jsonBuilder().startObject()
+                    .startObject(type).startObject("properties");
+            builder.startObject(id).field("type", "text").field("index_options","docs").endObject();
+
+            for(Field field:allFieldsList){
+                //string 类型做中文分词
+                if(String.class == field.getType()){
+                    builder.startObject(field.getName()).field("type", "text") .field("analyzer","ik_max_word").field("search_analyzer","ik_max_word").startObject("fields").startObject("keyword").field("type","keyword").field("ignore_above",256).endObject().endObject().endObject();
+                }
+            }
+            builder.endObject().endObject().endObject();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        PutMappingRequest mapping = Requests.putMappingRequest(index).type(type).source(builder);
+        PutMappingResponse putMappingResponse = client.admin().indices().putMapping(mapping).actionGet();
+        return putMappingResponse.isAcknowledged();
+    }
+
 
     /**
      * 删除索引
@@ -252,9 +388,9 @@ public class ElasticsearchUtil {
      * @author huanghuizhou
      * @date 2019.05.18 16:18:04
      */
-    public static<T>  MedusaEsPage<T> searchEs(String index, String type, int startPage, int pageSize, String keyWord, String sortField, Class<T>  clazz,boolean highShow,String... matchFields) {
-        matchFields=new String[]{"name","stageName","position"};
-        return doSearchEs(index,type,startPage,pageSize,keyWord,sortField,clazz,highShow,toSearchFields(matchFields));
+    public static<T>  MedusaEsPage<T> searchEs(String index, String type, int startPage, int pageSize, String keyWord, String sortField, Class<T>  clazz, EsQueryTypeEnum esQueryTypeEnum, boolean highShow, String... matchFields) {
+        //matchFields=new String[]{"name","stageName","position","employeeNumber"};
+        return doSearchEs(index,type,startPage,pageSize,keyWord,sortField,clazz, esQueryTypeEnum,highShow,toSearchFields(matchFields));
     }
 
     /**
@@ -276,29 +412,20 @@ public class ElasticsearchUtil {
      * @date 2019.05.20 18:23:21
      */
     //自定义权重
-    public static<T>  MedusaEsPage<T> searchEs(String index, String type, int startPage, int pageSize, String keyWord, String sortField, Class<T>  clazz,boolean highShow,SearchField... searchFields) {
-        return doSearchEs(index,type,startPage,pageSize,keyWord,sortField,clazz,highShow,searchFields);
+    public static<T>  MedusaEsPage<T> searchEs(String index, String type, int startPage, int pageSize, String keyWord, String sortField, Class<T>  clazz, EsQueryTypeEnum esQueryTypeEnum,boolean highShow,SearchField... searchFields) {
+        return doSearchEs(index,type,startPage,pageSize,keyWord,sortField,clazz,esQueryTypeEnum,highShow,searchFields);
     }
 
-    private static<T>  MedusaEsPage<T> doSearchEs(String index, String type, int startPage, int pageSize, String keyWord, String sortField, Class<T>  clazz,boolean highShow,SearchField[] searchFields) {
+    private static<T>  MedusaEsPage<T> doSearchEs(String index, String type, int startPage, int pageSize, String keyWord, String sortField, Class<T>  clazz, EsQueryTypeEnum esQueryTypeEnum,boolean highShow,SearchField[] searchFields) {
         if (searchFields == null || searchFields.length == 0) {
             throw new RuntimeException("searchFields not exists");
         }
-
-        String[] fields = Arrays.stream(searchFields).map(SearchField::getField).collect(Collectors.toList()).toArray(new String[searchFields.length]);
-        MultiMatchQueryBuilder multiMatchQueryBuilder = QueryBuilders.multiMatchQuery(keyWord,fields);
-        //设置权重
-        for (SearchField searchField : searchFields) {
-            multiMatchQueryBuilder.field(searchField.getField(), searchField.getWeight());
-        }
-
-        //中文分词
-        //multiMatchQueryBuilder.analyzer("ik_smart");
         SearchRequestBuilder searchRequestBuilder = client.prepareSearch(index);
         if (StringUtils.isNotEmpty(type)) {
             searchRequestBuilder.setTypes(type);
         }
-        searchRequestBuilder.setQuery(multiMatchQueryBuilder);
+        QueryBuilder queryBuilder=getQuery(esQueryTypeEnum,keyWord,searchFields);
+        searchRequestBuilder.setQuery(queryBuilder);
         searchRequestBuilder.setSearchType(SearchType.QUERY_THEN_FETCH);
         // 需要显示的字段，逗号分隔（缺省为全部字段）
         //searchRequestBuilder.setFetchSource(fields, null);
@@ -308,19 +435,8 @@ public class ElasticsearchUtil {
         }
         //设置高亮
         if(highShow){
-            HighlightBuilder highlightBuilder = new HighlightBuilder();
-            //设置前缀
-            highlightBuilder.preTags(PRE_TAG);
-            //设置后缀
-            highlightBuilder.postTags(POST_TAG);
-
-            // 设置高亮字段
-            for(String field:fields){
-                highlightBuilder.field(field);
-            }
-            searchRequestBuilder.highlighter(highlightBuilder);
+            highlight(searchRequestBuilder,searchFields);
         }
-
         // 分页设置 这里setForm 指的是跳过的个数 不是 startPage
         searchRequestBuilder.setFrom(startPage*pageSize).setSize(pageSize);
 
@@ -347,6 +463,75 @@ public class ElasticsearchUtil {
         return null;
     }
 
+
+    //设置高亮
+    private static void highlight(SearchRequestBuilder searchRequestBuilder, SearchField[] searchFields) {
+        HighlightBuilder highlightBuilder = new HighlightBuilder();
+        //设置前缀
+        highlightBuilder.preTags(PRE_TAG);
+        //设置后缀
+        highlightBuilder.postTags(POST_TAG);
+
+        // 设置高亮字段
+        for(SearchField field:searchFields){
+            highlightBuilder.field(field.getField());
+        }
+        searchRequestBuilder.highlighter(highlightBuilder);
+    }
+
+    private static QueryBuilder getQuery(EsQueryTypeEnum esQueryTypeEnum,String keyWord,SearchField[] searchFields){
+        if(esQueryTypeEnum==null){
+            throw new RuntimeException("es query type can not be null");
+        }
+        if(EsQueryTypeEnum.match==esQueryTypeEnum){
+            return getMatchQuery(keyWord,searchFields);
+        }
+        if(EsQueryTypeEnum.matchPhrase==esQueryTypeEnum){
+            return getBoolMatchPhraseQuery(keyWord,searchFields);
+        }
+        if(EsQueryTypeEnum.term==esQueryTypeEnum){
+            return getBoolTermQuery(keyWord,searchFields);
+        }
+        throw new RuntimeException("es query type mapping failed");
+    }
+
+
+    //匹配查询
+    private static QueryBuilder getMatchQuery(String keyWord,SearchField[] searchFields){
+        String[] fields = Arrays.stream(searchFields).map(SearchField::getField).collect(Collectors.toList()).toArray(new String[searchFields.length]);
+        if(searchFields.length==1){
+            return QueryBuilders.matchQuery(searchFields[0].getField(), keyWord);
+        }
+
+        MultiMatchQueryBuilder multiMatchQueryBuilder = QueryBuilders.multiMatchQuery(keyWord,fields);
+        //MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery("stageName", keyWord);
+        //设置权重
+        for (SearchField searchField : searchFields) {
+            multiMatchQueryBuilder.field(searchField.getField(), searchField.getWeight());
+        }
+        //中文分词
+        //multiMatchQueryBuilder.analyzer("ik_smart");
+        return multiMatchQueryBuilder;
+    }
+
+
+    //精准匹配
+    private static QueryBuilder getBoolTermQuery(String keyWord,SearchField[] searchFields){
+        BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
+        for(SearchField searchField:searchFields){
+            boolQueryBuilder.should(QueryBuilders.termQuery(searchField.getField(),keyWord)).boost(searchField.getWeight());
+        }
+        return boolQueryBuilder;
+    }
+
+    //整词匹配
+    private static QueryBuilder getBoolMatchPhraseQuery(String keyWord,SearchField[] searchFields){
+        BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
+        for(SearchField searchField:searchFields){
+            boolQueryBuilder.should(QueryBuilders.matchPhraseQuery(searchField.getField(),keyWord)).boost(searchField.getWeight());
+        }
+        return boolQueryBuilder;
+    }
 
     private static<T> List<T> parseSearchResponse(SearchResponse response, Class<T> entityClass,boolean highShow) {
         List<T> list = new ArrayList<>();
@@ -402,7 +587,11 @@ public class ElasticsearchUtil {
         return bizId.toString();
     }
 
+    //查询字段设置权重
     private static SearchField[] toSearchFields(String... searchFields) {
+        if(searchFields==null){
+            throw new RuntimeException("search field can not be null");
+        }
         return Arrays.stream(searchFields).map(q -> {
             SearchField field = new SearchField();
             field.setField(q);
