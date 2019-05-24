@@ -589,7 +589,7 @@ public class ElasticsearchUtil {
 
     //查询字段设置权重
     private static SearchField[] toSearchFields(String... searchFields) {
-        if(searchFields==null){
+        if(searchFields==null||searchFields.length==0){
             throw new RuntimeException("search field can not be null");
         }
         return Arrays.stream(searchFields).map(q -> {

@@ -170,7 +170,6 @@ public class EsController {
     @GetMapping("/queryMatch")
     @ApiOperation(value = "查询（权重都为1）", notes = "[@黄辉宙]")
     public MedusaEsPage<Account> queryMatch(@RequestParam @ApiParam(value = "查询内容") String keyWord, @RequestParam(defaultValue = "false") @ApiParam(value = "是否高亮") boolean highShow, @RequestParam(defaultValue = "0") @ApiParam("起始页") Integer startPage, @RequestParam(defaultValue = "10") @ApiParam("每页个数") Integer pageSize, @RequestParam(defaultValue = "0") @ApiParam("搜索类型 0:match 1：matchPhrase 2:term") Integer esQueryTypeEnum, String [] matchFields) {
-
         MedusaEsPage<Account> accountMedusaEsPage = ElasticsearchUtil.
                 searchEs(indexName, esType, startPage, pageSize, keyWord, null, Account.class, EsQueryTypeEnum.valueOf(esQueryTypeEnum.byteValue()),highShow,matchFields);
         return accountMedusaEsPage;
